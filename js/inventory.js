@@ -10,11 +10,12 @@
 
 const inv = {
   ingredients: [],
+  ingredientById: {},   // ingredient_id -> рядок ingredients
   map: {},              // ingredient_id -> is_available
   usage: {},            // ingredient_id -> у скількох коктейлях
-  slotsByCocktail: {},  // cocktail_id -> { position: [ingredient_id...] }
+  slotsByCocktail: {},  // cocktail_id -> { position: [{ingredient_id, measure_uk}...] }
   byIngredient: {},     // ingredient_id -> [cocktail_id...]
-  cocktailNames: {},    // cocktail_id -> назва укр
+  cocktailById: {},     // cocktail_id -> повний рядок cocktails (для оверлея)
   statusByCocktail: {}, // cocktail_id -> ready | almost | unavailable
   unlock: {},           // ingredient_id -> +N коктейлів, якщо додати
   readyCount: 0,
@@ -24,6 +25,8 @@ const inv = {
   avail: 'all',         // all | have | missing
   spy: null,
 };
+
+const invAvail = (id) => !!inv.map[id];
 
 // ── Ініціалізація ────────────────────────────────────────────────────
 
@@ -55,8 +58,8 @@ async function loadData() {
   const [ingRes, invRes, linkRes, cockRes] = await Promise.all([
     supabaseClient.from('ingredients').select('id, name, name_uk, category, subtype'),
     supabaseClient.from('inventory').select('ingredient_id, is_available'),
-    supabaseClient.from('cocktail_ingredients').select('cocktail_id, ingredient_id, position'),
-    supabaseClient.from('cocktails').select('id, name, name_uk'),
+    supabaseClient.from('cocktail_ingredients').select('cocktail_id, ingredient_id, position, measure, measure_uk'),
+    supabaseClient.from('cocktails').select('id, name, name_uk, category, iba_category, is_iba, instructions_uk, garnish_uk, image_url, video_url, glass_uk, glass_type, glass_variant_uk, glass_variant_type, glass_variant_condition_uk'),
   ]);
 
   const error = ingRes.error || invRes.error || linkRes.error || cockRes.error;
@@ -73,11 +76,13 @@ async function loadData() {
   }
 
   inv.ingredients = ingRes.data;
+  inv.ingredientById = {};
+  inv.ingredients.forEach((i) => { inv.ingredientById[i.id] = i; });
   inv.map = {};
   invRes.data.forEach((r) => { inv.map[r.ingredient_id] = r.is_available; });
 
-  inv.cocktailNames = {};
-  cockRes.data.forEach((c) => { inv.cocktailNames[c.id] = c.name_uk || c.name; });
+  inv.cocktailById = {};
+  cockRes.data.forEach((c) => { inv.cocktailById[c.id] = c; });
 
   inv.usage = {};
   inv.slotsByCocktail = {};
@@ -86,7 +91,10 @@ async function loadData() {
     inv.usage[l.ingredient_id] = (inv.usage[l.ingredient_id] || 0) + 1;
     (inv.byIngredient[l.ingredient_id] = inv.byIngredient[l.ingredient_id] || []).push(l.cocktail_id);
     const slots = (inv.slotsByCocktail[l.cocktail_id] = inv.slotsByCocktail[l.cocktail_id] || {});
-    (slots[l.position || 0] = slots[l.position || 0] || []).push(l.ingredient_id);
+    (slots[l.position || 0] = slots[l.position || 0] || []).push({
+      ingredient_id: l.ingredient_id,
+      measure_uk: l.measure_uk || l.measure || '',
+    });
   });
   inv.totalCocktails = Object.keys(inv.slotsByCocktail).length;
 
@@ -104,7 +112,7 @@ function computeDerived() {
 
   Object.entries(inv.slotsByCocktail).forEach(([cid, slots]) => {
     const missing = Object.values(slots).filter(
-      (ids) => !ids.some((id) => inv.map[id]));
+      (items) => !items.some((o) => inv.map[o.ingredient_id]));
     if (missing.length === 0) {
       inv.readyCount += 1;
       inv.statusByCocktail[cid] = 'ready';
@@ -115,9 +123,56 @@ function computeDerived() {
       inv.statusByCocktail[cid] = 'unavailable';
     }
     if (missing.length === 1) {
-      missing[0].forEach((id) => { inv.unlock[id] = (inv.unlock[id] || 0) + 1; });
+      missing[0].forEach((o) => { inv.unlock[o.ingredient_id] = (inv.unlock[o.ingredient_id] || 0) + 1; });
     }
   });
+}
+
+/** Коктейлі, які стануть доступними, якщо додати інгредієнт */
+function unlockList(ingredientId) {
+  const list = [];
+  Object.entries(inv.slotsByCocktail).forEach(([cid, slots]) => {
+    const missing = Object.values(slots).filter(
+      (items) => !items.some((o) => inv.map[o.ingredient_id]));
+    if (missing.length === 1 && missing[0].some((o) => o.ingredient_id === ingredientId)) {
+      list.push(cid);
+    }
+  });
+  return list;
+}
+
+/** Збирає повний об'єкт коктейлю для рецептурного оверлея */
+function buildSheetCocktail(cid) {
+  const raw = inv.cocktailById[cid];
+  const slotsMap = inv.slotsByCocktail[cid];
+  if (!raw || !slotsMap) return null;
+
+  const slots = Object.keys(slotsMap)
+    .sort((a, b) => Number(a) - Number(b))
+    .map((pos) => slotsMap[pos].map((o) => {
+      const ing = inv.ingredientById[o.ingredient_id] || {};
+      return {
+        ingredient_id: o.ingredient_id,
+        name: ing.name,
+        name_uk: ing.name_uk,
+        measure_uk: o.measure_uk,
+      };
+    }));
+
+  const missingSlots = slots.filter((slot) => !slot.some((i) => inv.map[i.ingredient_id]));
+  let status;
+  if (missingSlots.length === 0) status = 'ready';
+  else if (missingSlots.length <= 2) status = 'almost';
+  else status = 'unavailable';
+
+  return { ...raw, slots, missingSlots, missingCount: missingSlots.length, status };
+}
+
+function openInvSheet(cid) {
+  const c = buildSheetCocktail(cid);
+  if (!c) return;
+  hideUsagePop();
+  openCocktailSheet(c, { avail: invAvail });
 }
 
 // ── Зведення ─────────────────────────────────────────────────────────
@@ -187,9 +242,10 @@ function rowHtml(i) {
       <span class="nm">${escapeHtml(i.name_uk || i.name)}</span>
       ${i.name_uk ? `<span class="en">${escapeHtml(i.name)}</span>` : ''}
     </div>
-    <span class="inv-unlock" data-unlock="${i.id}"
-          title="Стільки коктейлів стануть доступні, якщо додати"
-          ${have || !unlockN ? 'hidden' : ''}>+${unlockN} до карти</span>
+    <button class="inv-unlock" type="button" data-unlock="${i.id}"
+          title="Показати коктейлі, які додадуться до карти"
+          aria-haspopup="true" aria-expanded="false"
+          ${have || !unlockN ? 'hidden' : ''}>+${unlockN} до карти</button>
     <button class="inv-usage" type="button" data-usage="${i.id}"
             title="Показати рецепти з цим інгредієнтом"
             aria-haspopup="true" aria-expanded="false">${usage} ${cocktailsWord(usage)}</button>
@@ -366,11 +422,14 @@ function patchAggregates() {
   });
 }
 
-// ── Поповер «у яких коктейлях» ───────────────────────────────────────
+// ── Поповери: «У рецептах» та «Додасться до карти» ───────────────────
 // Наведення показує список, клік «пришпилює» (для тачскрінів).
-// Закриття: Esc, клік поза, скрол сторінки, повторний клік.
+// Між кнопкою і поповером є проміжок — тому ховання відкладене
+// таймером і скасовується, щойно курсор заходить у поповер.
+// Клік по коктейлю в списку відкриває рецептурний оверлей.
 
 let popAnchor = null;
+let popHideTimer = null;
 
 function ensureUsagePop() {
   let pop = document.getElementById('usage-pop');
@@ -380,33 +439,46 @@ function ensureUsagePop() {
     pop.className = 'usage-pop';
     pop.hidden = true;
     document.body.appendChild(pop);
+
+    pop.addEventListener('mouseenter', () => clearTimeout(popHideTimer));
     pop.addEventListener('mouseleave', () => {
-      if (pop.dataset.pinned !== '1') hideUsagePop();
+      if (pop.dataset.pinned !== '1') scheduleHidePop(160);
+    });
+    // клік по коктейлю → деталі
+    pop.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-cid]');
+      if (item) openInvSheet(item.dataset.cid);
     });
   }
   return pop;
 }
 
-function showUsagePop(anchor, ingredientId) {
-  const pop = ensureUsagePop();
-  const ing = inv.ingredients.find((x) => x.id === ingredientId);
-  const rank = { ready: 0, almost: 1, unavailable: 2 };
+function scheduleHidePop(delay) {
+  clearTimeout(popHideTimer);
+  popHideTimer = setTimeout(hideUsagePop, delay);
+}
 
-  const list = (inv.byIngredient[ingredientId] || [])
-    .map((cid) => ({
-      name: inv.cocktailNames[cid] || cid,
-      st: inv.statusByCocktail[cid] || 'unavailable',
-    }))
-    .sort((a, b) => (rank[a.st] - rank[b.st]) || a.name.localeCompare(b.name, 'uk'));
+const POP_RANK = { ready: 0, almost: 1, unavailable: 2 };
+
+/** items: [{cid, name, st}] */
+function showListPop(anchor, title, items) {
+  const pop = ensureUsagePop();
+  clearTimeout(popHideTimer);
+
+  const rows = items
+    .sort((a, b) => (POP_RANK[a.st] - POP_RANK[b.st]) || a.name.localeCompare(b.name, 'uk'))
+    .map((c) => `
+      <li class="${c.st}">
+        <button class="pop-item" type="button" data-cid="${c.cid}" title="Відкрити рецепт">
+          <span class="pop-dot" aria-hidden="true"></span>${escapeHtml(c.name)}
+        </button>
+      </li>`).join('');
 
   pop.innerHTML = `
-    <div class="usage-pop-head">У рецептах · ${escapeHtml(ing ? (ing.name_uk || ing.name) : '')}</div>
-    <ul>${list.map((c) =>
-      `<li class="${c.st}"><span class="pop-dot" aria-hidden="true"></span>${escapeHtml(c.name)}</li>`).join('')
-      || '<li class="unavailable">Не використовується</li>'}</ul>`;
+    <div class="usage-pop-head">${title}</div>
+    <ul>${rows || '<li class="unavailable"><span class="pop-empty">Порожньо</span></li>'}</ul>`;
 
   pop.hidden = false;
-  pop.dataset.for = ingredientId;
 
   // позиціювання: під якорем, праві краї разом; вгору — якщо не влазить
   const r = anchor.getBoundingClientRect();
@@ -420,9 +492,33 @@ function showUsagePop(anchor, ingredientId) {
   if (popAnchor && popAnchor !== anchor) popAnchor.setAttribute('aria-expanded', 'false');
   popAnchor = anchor;
   anchor.setAttribute('aria-expanded', 'true');
+  pop.dataset.for = anchor.dataset.usage || anchor.dataset.unlock || '';
+  pop.dataset.kind = anchor.dataset.usage ? 'usage' : 'unlock';
+}
+
+function popForAnchor(anchor) {
+  if (anchor.dataset.usage !== undefined) {
+    const id = anchor.dataset.usage;
+    const ing = inv.ingredientById[id];
+    const items = (inv.byIngredient[id] || []).map((cid) => ({
+      cid,
+      name: (inv.cocktailById[cid] && (inv.cocktailById[cid].name_uk || inv.cocktailById[cid].name)) || cid,
+      st: inv.statusByCocktail[cid] || 'unavailable',
+    }));
+    showListPop(anchor, `У рецептах · ${escapeHtml(ing ? (ing.name_uk || ing.name) : '')}`, items);
+  } else {
+    const id = anchor.dataset.unlock;
+    const items = unlockList(id).map((cid) => ({
+      cid,
+      name: (inv.cocktailById[cid] && (inv.cocktailById[cid].name_uk || inv.cocktailById[cid].name)) || cid,
+      st: 'ready',
+    }));
+    showListPop(anchor, 'Додадуться до карти', items);
+  }
 }
 
 function hideUsagePop() {
+  clearTimeout(popHideTimer);
   const pop = document.getElementById('usage-pop');
   if (!pop || pop.hidden) return;
   pop.hidden = true;
@@ -435,35 +531,39 @@ function hideUsagePop() {
 
 function setupUsagePop() {
   const groupsEl = document.getElementById('inventory-groups');
+  const anchorSel = '[data-usage], [data-unlock]';
 
   groupsEl.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-usage]');
+    const btn = e.target.closest(anchorSel);
     if (!btn) return;
     e.stopPropagation();
     const pop = ensureUsagePop();
-    if (!pop.hidden && pop.dataset.pinned === '1' && pop.dataset.for === btn.dataset.usage) {
+    const key = btn.dataset.usage || btn.dataset.unlock;
+    const kind = btn.dataset.usage ? 'usage' : 'unlock';
+    if (!pop.hidden && pop.dataset.pinned === '1'
+        && pop.dataset.for === key && pop.dataset.kind === kind) {
       hideUsagePop();
       return;
     }
-    showUsagePop(btn, btn.dataset.usage);
+    popForAnchor(btn);
     pop.dataset.pinned = '1';
   });
 
   groupsEl.addEventListener('mouseover', (e) => {
-    const btn = e.target.closest('[data-usage]');
+    const btn = e.target.closest(anchorSel);
     if (!btn) return;
     const pop = ensureUsagePop();
     if (pop.dataset.pinned === '1') return;
-    showUsagePop(btn, btn.dataset.usage);
+    popForAnchor(btn);
   });
 
   groupsEl.addEventListener('mouseout', (e) => {
-    const btn = e.target.closest('[data-usage]');
+    const btn = e.target.closest(anchorSel);
     if (!btn) return;
     const pop = document.getElementById('usage-pop');
     if (!pop || pop.hidden || pop.dataset.pinned === '1') return;
     if (e.relatedTarget && pop.contains(e.relatedTarget)) return;
-    hideUsagePop();
+    scheduleHidePop(260);
   });
 
   document.addEventListener('click', (e) => {
@@ -472,13 +572,17 @@ function setupUsagePop() {
     hideUsagePop();
   });
 
-  window.addEventListener('scroll', hideUsagePop, { passive: true });
+  window.addEventListener('scroll', () => {
+    const pop = document.getElementById('usage-pop');
+    if (pop && !pop.hidden && pop.dataset.pinned !== '1') hideUsagePop();
+  }, { passive: true });
 }
 
 // ── Контролі ─────────────────────────────────────────────────────────
 
 function setupControls() {
   setupUsagePop();
+  setupCocktailSheet();
   document.getElementById('search-input').addEventListener('input', (e) => {
     inv.search = e.target.value.trim().toLowerCase();
     renderGroups();
@@ -500,6 +604,7 @@ function setupControls() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       hideUsagePop();
+      closeCocktailSheet();
       closeSignInModal();
     }
   });

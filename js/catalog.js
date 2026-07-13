@@ -266,32 +266,11 @@ function sealHtml(c) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></div>`;
 }
 
-function slotRowHtml(slot, compact) {
-  const have = slot.some((i) => !!state.inventory[i.ingredient_id]);
-  const measure = slot[0].measure_uk || '';
-
-  let names;
-  if (slot.length === 1) {
-    const i = slot[0];
-    names = `<span class="v ${state.inventory[i.ingredient_id] ? 'v-have' : 'v-miss'}"
-      ${compact ? '' : `data-ingredient-id="${i.ingredient_id}" role="button" tabindex="0" title="Всі коктейлі з цим інгредієнтом"`}>${escapeHtml(i.name_uk || i.name)}</span>`;
-  } else {
-    names = slot.map((i) => `<span class="v ${state.inventory[i.ingredient_id] ? 'v-have' : 'v-miss'}"
-      ${compact ? '' : `data-ingredient-id="${i.ingredient_id}" role="button" tabindex="0" title="Всі коктейлі з цим інгредієнтом"`}>${escapeHtml(i.name_uk || i.name)}</span>`)
-      .join('<em class="or">або</em>');
-  }
-
-  return `<li class="${have ? 'have' : 'miss'}">
-    <span class="dot" aria-hidden="true"></span>
-    <span class="ing-name">${names}</span>
-    <span class="leader" aria-hidden="true"></span>
-    <span class="amount">${escapeHtml(measure)}</span>
-  </li>`;
-}
+const availLookup = (id) => !!state.inventory[id];
 
 function cardHtml(c) {
   const nameUk = c.name_uk || c.name;
-  const rows = c.slots.map((s) => slotRowHtml(s, true)).join('');
+  const rows = c.slots.map((s) => slotRowHtml(s, { avail: availLookup })).join('');
 
   return `
   <article class="card reveal" data-id="${c.id}" tabindex="0" role="button"
@@ -317,114 +296,17 @@ function cardHtml(c) {
   </article>`;
 }
 
-// ── Рецептурний оверлей ──────────────────────────────────────────────
-
-let lastFocused = null;
+// ── Рецептурний оверлей (спільний, js/ui.js) ─────────────────────────
 
 function openSheet(id) {
   const c = state.cocktails.find((x) => x.id === id);
   if (!c) return;
-
-  const nameUk = c.name_uk || c.name;
-  const media = document.getElementById('sheet-media');
-  const content = document.getElementById('sheet-content');
-
-  media.innerHTML = c.image_url
-    ? `<img src="${c.image_url}" alt="${escapeHtml(nameUk)}">`
-    : `<div class="media-ph">${glassIcon(c.glass_type, 'ph-ico')}</div>`;
-
-  // статусний рядок
-  const missingNames = c.missingSlots.map((slot) => slot[0].name_uk || slot[0].name);
-  let statusLine;
-  if (c.status === 'ready') {
-    statusLine = `<p class="sheet-status ok"><span class="dot"></span>Можна приготувати — все є в барі</p>`;
-  } else {
-    const shown = missingNames.slice(0, 3).map(escapeHtml).join(', ');
-    const rest = missingNames.length > 3 ? ` та ще ${missingNames.length - 3}` : '';
-    statusLine = `<p class="sheet-status ${c.status === 'almost' ? 'warn' : 'bad'}">
-      <span class="dot"></span>Не вистачає: ${shown}${rest}</p>`;
-  }
-
-  const rows = c.slots.map((s) => slotRowHtml(s, false)).join('');
-  const instructions = c.instructions_uk || '';
-  const garnish = c.garnish_uk || '';
-
-  // Непомітна іконка відео біля заголовка «Приготування»
-  const videoMini = c.video_url ? `
-    <a class="video-mini" href="${c.video_url}" target="_blank" rel="noopener"
-       title="Відео приготування (YouTube)" aria-label="Відео приготування">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8.5 5.8v12.4L18.5 12 8.5 5.8Z"/></svg>
-    </a>` : '';
-
-  const glassBlock = c.glass_uk ? `
-    <section class="sheet-section">
-      <h4 class="sheet-eyebrow">Подача</h4>
-      <div class="glass-row">${glassIcon(c.glass_type)}<span>${escapeHtml(c.glass_uk)}</span></div>
-      ${c.glass_variant_uk ? `
-        <div class="glass-variant">
-          ${c.glass_variant_condition_uk ? `<span class="glass-cond">${escapeHtml(c.glass_variant_condition_uk)}</span>` : ''}
-          <div class="glass-row">${glassIcon(c.glass_variant_type)}<span>${escapeHtml(c.glass_variant_uk)}</span></div>
-        </div>` : ''}
-    </section>` : '';
-
-  content.innerHTML = `
-    <div class="sheet-tags">
-      ${c.category ? `<span class="meta-cat">${categoryIcon(c.category)}${escapeHtml(c.category)}</span>` : ''}
-      ${c.is_iba ? `<span class="meta-iba">IBA&thinsp;·&thinsp;${IBA_LABELS[c.iba_category] || ''}</span>` : ''}
-    </div>
-    <h2 class="sheet-title">${escapeHtml(nameUk)}</h2>
-    ${c.name_uk ? `<p class="sheet-title-en">${escapeHtml(c.name)}</p>` : ''}
-    ${statusLine}
-
-    <section class="sheet-section">
-      <h4 class="sheet-eyebrow">Інгредієнти</h4>
-      <ul class="sheet-ingredients">${rows || '<li>Немає даних</li>'}</ul>
-    </section>
-
-    ${(instructions || videoMini) ? `
-    <section class="sheet-section">
-      <h4 class="sheet-eyebrow">Приготування${videoMini}</h4>
-      ${instructions ? `<p class="sheet-prose">${escapeHtml(instructions)}</p>` : ''}
-    </section>` : ''}
-
-    ${glassBlock}
-
-    ${garnish ? `
-    <section class="sheet-section">
-      <h4 class="sheet-eyebrow">Гарнір</h4>
-      <p class="sheet-prose">${escapeHtml(garnish)}</p>
-    </section>` : ''}
-  `;
-
-  content.querySelectorAll('[data-ingredient-id]').forEach((el) => {
-    const go = () => filterByIngredient(el.dataset.ingredientId);
-    el.addEventListener('click', go);
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    });
-  });
-
-  lastFocused = document.activeElement;
-  const overlay = document.getElementById('cocktail-sheet');
-  overlay.classList.add('open');
-  overlay.setAttribute('aria-hidden', 'false');
-  content.scrollTop = 0;
-  lockScroll(true);
-  document.getElementById('sheet-close-btn').focus({ preventScroll: true });
-}
-
-function closeSheet() {
-  const overlay = document.getElementById('cocktail-sheet');
-  if (!overlay.classList.contains('open')) return;
-  overlay.classList.remove('open');
-  overlay.setAttribute('aria-hidden', 'true');
-  lockScroll(false);
-  if (lastFocused && lastFocused.focus) lastFocused.focus({ preventScroll: true });
+  openCocktailSheet(c, { avail: availLookup, onIngredientClick: filterByIngredient });
 }
 
 /** Клік по інгредієнту в оверлеї → фільтр карти за ним */
 function filterByIngredient(ingredientId) {
-  closeSheet();
+  closeCocktailSheet();
   state.ingredientFilter = ingredientId;
   document.getElementById('filter-ingredient').value = ingredientId;
   setStatusTab('all');
@@ -555,14 +437,11 @@ function setupStaticHandlers() {
   document.getElementById('clear-filters-btn').addEventListener('click', clearAllFilters);
 
   // оверлей
-  document.getElementById('sheet-close-btn').addEventListener('click', closeSheet);
-  document.getElementById('cocktail-sheet').addEventListener('click', (e) => {
-    if (e.target.id === 'cocktail-sheet') closeSheet();
-  });
+  setupCocktailSheet();
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      closeSheet();
+      closeCocktailSheet();
       closeSignInModal();
     }
   });

@@ -1516,22 +1516,43 @@ li.miss .ing-name { color: var(--text-faint); }
   max-height: 250px;
   overflow-y: auto;
 }
-.usage-pop li {
+.usage-pop li { color: #d9cbb4; }
+.usage-pop li.unavailable { color: var(--text-faint); }
+
+/* коктейль у списку — клікабельний, відкриває рецепт */
+.pop-item {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 5px 16px;
+  width: 100%;
+  padding: 6px 16px;
+  background: none;
+  border: none;
+  text-align: left;
   font-family: var(--sans);
   font-weight: 300;
   font-size: 0.8rem;
   letter-spacing: 0.04em;
-  color: #d9cbb4;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
 }
-.usage-pop li.unavailable { color: var(--text-faint); }
+.pop-item:hover {
+  background: rgba(201, 163, 92, 0.08);
+  color: var(--gold-bright);
+}
+.pop-empty {
+  display: block;
+  padding: 6px 16px;
+  font-family: var(--sans);
+  font-weight: 300;
+  font-size: 0.78rem;
+}
 .pop-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
 .usage-pop li.ready .pop-dot { background: var(--green-dim); box-shadow: 0 0 6px rgba(127, 169, 128, 0.35); }
 .usage-pop li.almost .pop-dot { background: var(--gold); opacity: 0.75; }
 .usage-pop li.unavailable .pop-dot { background: transparent; border: 1px solid var(--red-dim); }
+/* «+N до карти» — кнопка зі списком коктейлів, що розблокуються */
 .inv-unlock {
   font-family: var(--sans);
   font-weight: 400;
@@ -1544,6 +1565,14 @@ li.miss .ing-name { color: var(--text-faint); }
   border-radius: 999px;
   padding: 3px 10px;
   white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.22s, border-color 0.22s, background 0.22s;
+}
+.inv-unlock:hover,
+.inv-unlock[aria-expanded="true"] {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+  background: rgba(201, 163, 92, 0.14);
 }
 
 /* Латунний тумблер */

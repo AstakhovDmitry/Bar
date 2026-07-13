@@ -71,6 +71,17 @@
   </div>
 </main>
 
+<!-- Оверлей: рецептурна картка коктейлю (спільний з картою) -->
+<div class="sheet-overlay" id="cocktail-sheet" aria-hidden="true">
+  <article class="sheet" role="dialog" aria-modal="true" aria-label="Деталі коктейлю">
+    <button class="modal-close sheet-close" id="sheet-close-btn" type="button" aria-label="Закрити">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+    </button>
+    <div class="sheet-media" id="sheet-media"></div>
+    <div class="sheet-content" id="sheet-content"></div>
+  </article>
+</div>
+
 <!-- Модалка входу власника -->
 <div class="modal-overlay" id="signin-modal" aria-hidden="true">
   <div class="modal signin-card" role="dialog" aria-modal="true" aria-label="Вхід для власника">
