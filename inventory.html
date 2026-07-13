@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Інвентар — Коктейльна карта</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9a35c' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M4.5 5.5h15c0 3.9-3.2 6.3-7.5 6.3S4.5 9.4 4.5 5.5Z'/%3E%3Cpath d='M12 11.8V19M8.5 21h7'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Forum&family=Oswald:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="wordmark" href="index.html"><span class="gem"></span>Коктейльна карта</a>
+    <nav class="site-nav" aria-label="Основна навігація">
+      <a class="nav-link" href="index.html" id="nav-inventory" hidden>Карта</a>
+      <span id="auth-area"></span>
+    </nav>
+  </div>
+</header>
+
+<!-- Заглушка для гостей -->
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <svg class="gate-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="6" y="10.6" width="12" height="9" rx="2"/><path d="M8.6 10.6V8.2a3.4 3.4 0 0 1 6.8 0v2.4"/></svg>
+    <span class="eyebrow">Службова частина</span>
+    <h1>Тільки для власника</h1>
+    <p>Ця сторінка керує запасами бару і доступна лише після входу.</p>
+    <button class="btn" id="gate-signin-btn" type="button">Увійти</button>
+  </div>
+</div>
+
+<!-- Робоча зона власника -->
+<main class="inventory" id="inventory-wrap" hidden>
+
+  <div class="inv-head">
+    <span class="eyebrow">Службова частина</span>
+    <h1>Комора бару</h1>
+    <p class="inv-sub">Позначте, що є на полицях, — коктейльна карта оновиться сама.</p>
+  </div>
+
+  <!-- Зведення -->
+  <section class="inv-stats" id="inv-stats" aria-label="Зведення запасів"></section>
+
+  <!-- Пошук + фільтр наявності -->
+  <div class="inv-controls" id="inv-controls">
+    <div class="input-wrap inv-search">
+      <svg class="input-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="6.3"/><path d="M15.7 15.7 21 21"/></svg>
+      <input type="search" id="search-input" placeholder="Пошук інгредієнта…" autocomplete="off">
+    </div>
+    <div class="seg" role="tablist" aria-label="Фільтр наявності">
+      <button class="seg-btn active" data-avail="all" role="tab" aria-selected="true" type="button">Всі</button>
+      <button class="seg-btn" data-avail="have" role="tab" aria-selected="false" type="button">Є в барі</button>
+      <button class="seg-btn" data-avail="missing" role="tab" aria-selected="false" type="button">Немає</button>
+    </div>
+  </div>
+
+  <!-- Мобільна стрічка категорій -->
+  <div class="inv-chips" id="inv-chips" aria-label="Швидкий перехід"></div>
+
+  <div class="inv-layout">
+    <!-- Бічна навігація (desktop) -->
+    <aside class="inv-rail" id="inv-rail" aria-label="Категорії інгредієнтів"></aside>
+
+    <!-- Групи інгредієнтів -->
+    <div class="inv-groups" id="inventory-groups"></div>
+  </div>
+</main>
+
+<!-- Модалка входу власника -->
+<div class="modal-overlay" id="signin-modal" aria-hidden="true">
+  <div class="modal signin-card" role="dialog" aria-modal="true" aria-label="Вхід для власника">
+    <button class="modal-close" id="signin-close-btn" type="button" aria-label="Закрити">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+    </button>
+    <div class="signin-body">
+      <span class="eyebrow">Коктейльна карта</span>
+      <h3>Вхід для власника</h3>
+      <form id="signin-form">
+        <div class="form-field">
+          <label for="signin-email">Email</label>
+          <input type="email" id="signin-email" required autocomplete="username">
+        </div>
+        <div class="form-field">
+          <label for="signin-password">Пароль</label>
+          <input type="password" id="signin-password" required autocomplete="current-password">
+        </div>
+        <div class="form-error" id="signin-error" role="alert"></div>
+        <button type="submit" class="btn btn-gold" style="width:100%;">Увійти</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/inventory.js"></script>
+</body>
+</html>
