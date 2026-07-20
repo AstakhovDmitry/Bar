@@ -35,10 +35,10 @@ async function loadData() {
   renderSkeleton();
 
   const [ingRes, invRes, cockRes, linkRes] = await Promise.all([
-    supabaseClient.from('ingredients').select('id, name, name_uk, category, subtype'),
+    supabaseClient.from('ingredients').select('id, name, name_uk, category, subtype, abv'),
     supabaseClient.from('inventory').select('ingredient_id, is_available'),
     supabaseClient.from('cocktails').select('id, name, name_uk, category, iba_category, is_iba, instructions_uk, garnish_uk, image_url, video_url, glass_uk, glass_type, glass_variant_uk, glass_variant_type, glass_variant_condition_uk'),
-    supabaseClient.from('cocktail_ingredients').select('cocktail_id, ingredient_id, measure, measure_uk, position'),
+    supabaseClient.from('cocktail_ingredients').select('cocktail_id, ingredient_id, measure, measure_uk, measure_ml, position'),
   ]);
 
   const error = ingRes.error || invRes.error || cockRes.error || linkRes.error;
@@ -68,6 +68,9 @@ async function loadData() {
         name: ing.name,
         name_uk: ing.name_uk,
         measure_uk: l.measure_uk || l.measure || '',
+        measure_raw: l.measure || '',
+        measure_ml: l.measure_ml,
+        abv: ing.abv,
         position: l.position || 0,
       });
     });
@@ -291,6 +294,7 @@ function cardHtml(c) {
       <footer class="card-meta">
         ${c.category ? `<span class="meta-cat">${categoryIcon(c.category)}${escapeHtml(c.category)}</span>` : ''}
         ${c.is_iba ? `<span class="meta-iba">IBA&thinsp;·&thinsp;${IBA_LABELS[c.iba_category] || ''}</span>` : ''}
+        ${abvTagHtml(c)}
       </footer>
     </div>
   </article>`;

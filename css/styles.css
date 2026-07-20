@@ -876,6 +876,17 @@ li.miss .ing-name { color: var(--text-faint); }
   color: var(--text-faint);
   opacity: 0.75;
 }
+/* приблизна міцність «≈ N%» */
+.meta-abv {
+  font-family: var(--sans);
+  font-weight: 400;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  opacity: 0.85;
+  white-space: nowrap;
+  cursor: help;
+}
 
 /* Печатка доступності — непомітний ромб у куті */
 .card-seal {

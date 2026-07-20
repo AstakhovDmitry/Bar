@@ -172,6 +172,54 @@ function lockScroll(lock) {
   document.documentElement.style.overflow = lock ? 'hidden' : '';
 }
 
+// ── Оцінка міцності коктейлю ─────────────────────────────────────────
+// ABV ≈ чистий спирт / (об'єм інгредієнтів × коефіцієнт розведення льодом).
+// Слоти-альтернативи: береться перший варіант (різниця в межах похибки).
+
+const TOPUP_ML = {
+  highball: 100, collins: 110, jar: 100, hurricane: 90,
+  copper_mug: 100, mug: 90, flute: 75, wine: 90,
+};
+
+function estimateAbv(c) {
+  let alcohol = 0;
+  let volume = 0;
+
+  (c.slots || []).forEach((slot) => {
+    const i = slot[0];
+    const raw = `${i.measure_raw || ''} ${i.measure_uk || ''}`.toLowerCase();
+    let ml = (i.measure_ml === null || i.measure_ml === undefined) ? null : Number(i.measure_ml);
+
+    if (ml === null || Number.isNaN(ml)) {
+      if (/top|долит|доповн/.test(raw)) ml = TOPUP_ML[c.glass_type] || 80;      // «долити»
+      else if (/dash|деш|крапл/.test(raw)) ml = (parseFloat(raw) || 1) * 0.9;   // деші
+      else if (/spoon|ложк/.test(raw)) ml = (parseFloat(raw) || 1) * 5;         // барні ложки
+      else ml = 0; // «до смаку», гарніроподібне — не рахуємо
+    }
+
+    volume += ml;
+    alcohol += ml * ((Number(i.abv) || 0) / 100);
+  });
+
+  if (volume <= 0) return null;
+
+  let dilution = 1.25; // build у бокалі з льодом
+  const instr = (c.instructions_uk || '').toLowerCase();
+  if (c.category === 'Гарячі') dilution = 1.0;
+  else if (/блендер/.test(instr)) dilution = 1.45;
+  else if (/збий|збит|збовт|шейк|струс/.test(instr)) dilution = 1.4;
+  else if (/розміш|переміш|зміша/.test(instr)) dilution = 1.28;
+
+  return Math.round((alcohol / (volume * dilution)) * 100);
+}
+
+/** Тег «≈ N%» для мета-рядків картки та оверлея */
+function abvTagHtml(c) {
+  const pct = estimateAbv(c);
+  if (pct === null) return '';
+  return `<span class="meta-abv" title="Приблизна міцність з урахуванням розведення льодом">≈ ${pct}%</span>`;
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Спільний рецептурний оверлей (карта + комора).
 // Очікує на сторінці розмітку: #cocktail-sheet > #sheet-media,
@@ -266,6 +314,7 @@ function openCocktailSheet(c, opts) {
     <div class="sheet-tags">
       ${c.category ? `<span class="meta-cat">${categoryIcon(c.category)}${escapeHtml(c.category)}</span>` : ''}
       ${c.is_iba ? `<span class="meta-iba">IBA&thinsp;·&thinsp;${IBA_LABELS[c.iba_category] || ''}</span>` : ''}
+      ${abvTagHtml(c)}
     </div>
     <h2 class="sheet-title">${escapeHtml(nameUk)}</h2>
     ${c.name_uk ? `<p class="sheet-title-en">${escapeHtml(c.name)}</p>` : ''}
